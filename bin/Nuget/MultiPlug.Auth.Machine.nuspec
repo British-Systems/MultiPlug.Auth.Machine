@@ -1,0 +1,20 @@
+﻿<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>MultiPlug.Auth.Machine</id>
+    <version>1.0.0</version>
+    <title>MultiPlug Authentication for Windows</title>
+    <authors>British Systems</authors>
+    <owners>British Systems</owners>
+    <projectUrl>https://github.com/british-systems/MultiPlug.Auth.Machine</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/british-systems/MultiPlug.Auth.Machine/master/multiplug.ico</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Microsoft Windows machine based authentication for the MultiPlug .Net Edge Computing Platform</description>
+    <releaseNotes>1.0.0 Published</releaseNotes>
+    <copyright>Great British Systems Ltd 2020</copyright>
+    <tags>MultiPlug Edge_Computing IOT IIOT</tags>
+    <dependencies>
+      <dependency id="MultiPlug.Core" version="2.2.56" />
+    </dependencies>
+  </metadata>
+</package>
