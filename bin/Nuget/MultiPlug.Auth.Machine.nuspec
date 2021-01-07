@@ -2,19 +2,27 @@
 <package >
   <metadata>
     <id>MultiPlug.Auth.Machine</id>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <title>MultiPlug Authentication for Windows</title>
     <authors>British Systems</authors>
     <owners>British Systems</owners>
     <projectUrl>https://github.com/british-systems/MultiPlug.Auth.Machine</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/british-systems/MultiPlug.Auth.Machine/master/multiplug.ico</iconUrl>
+    <icon>images\multiplugico.png</icon>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Microsoft Windows machine based authentication for the MultiPlug .Net Edge Computing Platform</description>
-    <releaseNotes>1.0.0 Published</releaseNotes>
-    <copyright>Great British Systems Ltd 2020</copyright>
+    <releaseNotes>1.0.1 upgrade for MultiPlug.Base 1.0.52
+1.0.0 Published</releaseNotes>
+    <copyright>Great British Systems Ltd 2021</copyright>
     <tags>MultiPlug Edge_Computing IOT IIOT</tags>
     <dependencies>
-      <dependency id="MultiPlug.Core" version="2.2.56" />
+      <group targetFramework=".NETFramework4.7.2">
+        <dependency id="MultiPlug.Base" version="1.0.52" />
+        <dependency id="MultiPlug.Core" version="2.2.68" />
+      </group>
     </dependencies>
   </metadata>
+  <files>
+    <file src="images\multiplugico.png" target="images\" />
+    <file src="..\..\src\MultiPlug.Auth.Machine\bin\Release\MultiPlug.Auth.Machine.dll" target="lib\net472" />
+  </files>
 </package>

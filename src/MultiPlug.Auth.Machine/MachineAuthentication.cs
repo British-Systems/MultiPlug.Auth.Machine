@@ -22,7 +22,7 @@ namespace MultiPlug.Auth.Machine
             }
         }
 
-        public AuthResult Authenticate(AuthCredentials theCredentials)
+        public IAuthResult Authenticate(IAuthCredentials theCredentials)
         {
             bool Result = false;
             string Message = "OK";
