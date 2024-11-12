@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>MultiPlug.Auth.Machine</id>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <title>MultiPlug Authentication for Windows</title>
     <authors>British Systems</authors>
     <owners>British Systems</owners>
@@ -14,6 +14,7 @@
     <repository type="git" url="https://github.com/British-Systems/MultiPlug.Auth.Machine" />
     <readme>docs\README.md</readme>
     <releaseNotes>
+1.0.4 https://github.com/British-Systems/MultiPlug.Auth.Machine/issues/2
 1.0.3 https://github.com/British-Systems/MultiPlug.Auth.Machine/issues/1
 1.0.2 upgrades for MultiPlug.Base 1.0.53
 1.0.1 upgrade for MultiPlug.Base 1.0.52
@@ -22,7 +23,7 @@
     <tags>MultiPlug Edge_Computing IOT IIOT</tags>
     <dependencies>
       <group targetFramework=".NETFramework4.7.2">
-        <dependency id="MultiPlug.Base" version="1.0.72" />
+        <dependency id="MultiPlug.Base" version="1.0.74" />
         <dependency id="MultiPlug.Core" version="2.2.81" />
       </group>
     </dependencies>

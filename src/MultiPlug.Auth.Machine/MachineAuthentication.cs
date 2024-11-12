@@ -2,17 +2,22 @@
 using System.Linq;
 using System.Text;
 using System.Collections.Generic;
-using System.DirectoryServices.AccountManagement;
-using MultiPlug.Base.Security;
 using System.Management;
 using System.DirectoryServices;
+using System.DirectoryServices.AccountManagement;
+using MultiPlug.Base.Security;
+
+
+using MultiPlug.Auth.Machine.Models;
+using MultiPlug.Auth.Machine.File;
+using MultiPlug.Auth.Machine.Models.File;
 
 namespace MultiPlug.Auth.Machine
 {
     public class MachineAuthentication : IAuthentication
     {
         private string[] m_Domains;
-        private static readonly Scheme[] c_Schemes = { Scheme.Form, Scheme.Basic };
+        private static readonly Scheme[] c_Schemes = { Scheme.Form, Scheme.Basic, Scheme.BearerToken };
         private static readonly string[] c_HttpRequestHeaders = { "Authorization" };
         private static readonly string[] c_HttpQueryKeys = { "Username", "Password", "Authorization" };
 
@@ -25,7 +30,7 @@ namespace MultiPlug.Auth.Machine
         {
             if(Environment.OSVersion.Platform == PlatformID.Unix)
             {
-                return new AuthResult(false, string.Empty, "Operation only supported on Windows");
+                return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), "Operation only supported on Windows");
             }
 
             try
@@ -40,45 +45,136 @@ namespace MultiPlug.Auth.Machine
                 grp = AD.Children.Find("Guests", "group");
                 if (grp != null) { grp.Invoke("Add", new object[] { NewUser.Path.ToString() }); }
 
-                return new AuthResult(true, theCredentials.Username, string.Empty);
+                return new AuthResult(true, new AUser(theCredentials.Username, true, new string[0]), string.Empty);
             }
             catch (Exception ex)
             {
-                return new AuthResult(false, string.Empty, ex.Message);
+                return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), ex.Message);
             }
         }
 
         public IAuthResult Edit(IAuthCredentials theCredentials, IAuthCredentials theNewCredentials)
         {
-            return new AuthResult(false, string.Empty, "Use Windows to change users or passwords");
+            if (!string.IsNullOrEmpty(theNewCredentials.Password))
+            {
+                return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), "Use Microsoft Windows to change passwords");
+            }
+
+            FileBody File = FileManager.Read();
+
+            var Search = FileManager.SearchUser(File, theCredentials.Username);
+
+            // New Tokens
+            var AuthHeader = GetAuthHeader(theNewCredentials.HttpRequestHeaders);
+            var AuthFriendlyName = GetAuthFriendlyNameHeader(theNewCredentials.HttpRequestHeaders);
+
+            FileToken[] NewTokens = new FileToken[0];
+
+            if (AuthHeader != null && AuthFriendlyName != null && AuthHeader.Length == AuthFriendlyName.Length)
+            {
+                NewTokens = new FileToken[AuthHeader.Length];
+
+                for (int i = 0; i < AuthHeader.Length; i++)
+                {
+                    NewTokens[i] = new FileToken { Value = AuthHeader[i], FriendlyName = AuthFriendlyName[i] };
+                }
+            }
+            else
+            {
+                if(Search == null)
+                {
+                    return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], theCredentials.Username), false, FileManager.GetUserTokens(Search)), "Not Modified" );
+                }
+                else
+                {
+                    return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], Search.Username), Search.Enabled, FileManager.GetUserTokens(Search)), "Not Modified" );
+                }
+            }
+
+            if (Search == null)
+            {
+                Search = new FileUser { Enabled = false, Username = theCredentials.Username, Tokens = NewTokens };
+                FileManager.AddUser(File, Search);
+            }
+            else
+            {
+                FileManager.AddTokens(Search, NewTokens);
+            }
+
+            FileManager.Write(File);
+
+            return new AuthResult(true, new AUser(FileManager.GetFullUsername(m_Domains[0], Search.Username), Search.Enabled, FileManager.GetUserTokens(Search).ToArray()), "OK" );
         }
 
         public IAuthResult Delete(IAuthCredentials theCredentials)
         {
-            if (Environment.OSVersion.Platform == PlatformID.Unix)
-            {
-                return new AuthResult(false, string.Empty, "Operation only supported on Windows");
-            }
+            var AuthFriendlyName = GetAuthFriendlyNameHeader(theCredentials.HttpRequestHeaders);
 
-            try
+            if (AuthFriendlyName != null)
             {
-                DirectoryEntry AD = new DirectoryEntry("WinNT://" + Environment.MachineName + ",computer");
-                DirectoryEntries entries = AD.Children;
-                DirectoryEntry user = entries.Find(theCredentials.Username);
-                entries.Remove(user);
+                FileBody File = FileManager.Read();
 
-                return new AuthResult(true, theCredentials.Username, string.Empty);
+                var UserSearch = FileManager.SearchUser(File, theCredentials.Username);
+
+                if (UserSearch != null)
+                {
+                    if( FileManager.RemoveTokens(UserSearch, AuthFriendlyName))
+                    {
+                        if(UserSearch.Tokens == null || UserSearch.Tokens.Length == 0 && UserSearch.Enabled == false)
+                        {
+                            FileManager.DeleteUser(File, UserSearch);
+                        }
+
+                        FileManager.Write(File);
+
+                        return new AuthResult(true, new AUser(FileManager.GetFullUsername(m_Domains[0], UserSearch.Username), UserSearch.Enabled, FileManager.GetUserTokens(UserSearch)), "OK");
+                    }
+                    else
+                    {
+                        return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], UserSearch.Username), UserSearch.Enabled, FileManager.GetUserTokens(UserSearch)), "Token Not Found");
+                    }
+                }
+                else
+                {
+                    return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], theCredentials.Username), false, new string[0]), "User not found");
+                }
             }
-            catch (Exception ex)
+            else
             {
-                return new AuthResult(false, string.Empty, ex.Message);
-            }
+                if (Environment.OSVersion.Platform == PlatformID.Unix)
+                {
+                    return new AuthResult(false, null, "Operation only supported on Microsoft Windows");
+                }
 
+                FileBody File = FileManager.Read();
+
+                var Search = FileManager.SearchUser(File, theCredentials.Username);
+
+                if (Search != null)
+                {
+                    FileManager.DeleteUser(File, Search);
+                    FileManager.Write(File);
+                }
+
+                try
+                {
+                    DirectoryEntry AD = new DirectoryEntry("WinNT://" + Environment.MachineName + ",computer");
+                    DirectoryEntries entries = AD.Children;
+                    DirectoryEntry user = entries.Find(theCredentials.Username);
+                    entries.Remove(user);
+
+                    return new AuthResult(true, new AUser(FileManager.GetFullUsername(m_Domains[0], theCredentials.Username), true, new string[0]), string.Empty);
+                }
+                catch (Exception ex)
+                {
+                    return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], theCredentials.Username), false, new string[0]), ex.Message);
+                }
+            }
         }
 
-        public IReadOnlyCollection<string> Users()
+        public IReadOnlyCollection<IUser> Users()
         {
-            List<string> UserList;
+            List<AUser> UserList;
 
             if ( Environment.OSVersion.Platform != PlatformID.Unix )
             {
@@ -87,19 +183,71 @@ namespace MultiPlug.Auth.Machine
 
                 var SearchResult = searcher.Get();
 
-                UserList = new List<string>(SearchResult.Count);
+                UserList = new List<AUser>(SearchResult.Count);
+
+                FileBody File = FileManager.Read();
 
                 foreach (ManagementObject envVar in SearchResult)
                 {
-                    UserList.Add(m_Domains[0] + "\\" + envVar["Name"].ToString());
+                    string User = envVar["Name"].ToString();
+
+                    var Search = FileManager.SearchUser(File, User);
+
+                    if(Search == null)
+                    {
+                        UserList.Add(new AUser(FileManager.GetFullUsername(m_Domains[0], User), false, new string[0]));
+                    }
+                    else
+                    {
+                        UserList.Add(new AUser(FileManager.GetFullUsername(m_Domains[0], User), Search.Enabled, FileManager.GetUserTokens(Search)));
+                    }
                 }
             }
             else
             {
-                UserList = new List<string>(0);
+                UserList = new List<AUser>(0);
             }
 
             return Array.AsReadOnly(UserList.ToArray());
+        }
+
+        public IAuthResult Enable(string theUser, bool isEnabled)
+        {
+            FileBody File = FileManager.Read();
+
+            var Search = FileManager.SearchUser(File, theUser);
+
+            if(Search == null)
+            {
+                if(isEnabled)
+                {
+                    FileManager.AddUser(File, new FileUser { Enabled = isEnabled, Tokens = new FileToken[0], Username = theUser });
+                    FileManager.Write(File);
+                }
+
+                return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], theUser) , isEnabled, new string[0]), "OK");
+            }
+            else
+            {
+                if (Search.Tokens != null && Search.Tokens.Length > 0)
+                {
+                    Search.Enabled = isEnabled;
+                }
+                else
+                {
+                    if (isEnabled)
+                    {
+                        Search.Enabled = isEnabled; // true
+                    }
+                    else
+                    {
+                        FileManager.DeleteUser(File, Search); // Users are disabled by default, no need to store them in a file
+                    }
+                }
+
+                FileManager.Write(File);
+                return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], theUser), isEnabled, FileManager.GetUserTokens(Search)), "OK");
+            }
         }
 
         public IReadOnlyCollection<string> Domains
@@ -138,7 +286,16 @@ namespace MultiPlug.Auth.Machine
         {
             bool Result = false;
             string Message = "OK";
-            string Identity = string.Empty;
+            string Identity = FileManager.GetFullUsername(m_Domains[0], Username);
+
+            FileBody File = FileManager.Read();
+
+            var Search = FileManager.SearchUser(File, Username);
+
+            if (Search == null || Search.Enabled == false)
+            {
+                return new AuthResult(Result, new AUser(Identity, false, FileManager.GetUserTokens(Search)), "User Not Enabled");
+            }
 
             try
             {
@@ -165,32 +322,65 @@ namespace MultiPlug.Auth.Machine
                 Message = ex.Message;
             }
 
-            if(Result)
-            {
-                Identity = m_Domains[0] + "\\" + Username;
-            }
+            return new AuthResult(Result, new AUser(Identity, true, FileManager.GetUserTokens(Search)), Message);
+        }
 
-            return new AuthResult(Result, Identity, Message);
+        private IAuthResult doTokenLookUp(string Token)
+        {
+            FileBody File = FileManager.Read();
+
+            FileUser UserSearch = File.Users.FirstOrDefault(User =>
+            {
+                if (User.Tokens != null)
+                {
+                    return (User.Tokens.FirstOrDefault(T => T.Value == Token) != null) ? true : false;
+                }
+                else
+                {
+                    return false;
+                }
+            });
+
+            if (UserSearch != null)
+            {
+                if (!UserSearch.Enabled)
+                {
+                    return new AuthResult(false, new AUser(FileManager.GetFullUsername(m_Domains[0], UserSearch.Username), UserSearch.Enabled, FileManager.GetUserTokens(UserSearch)), "User is disabled" );
+                }
+                else
+                {
+                    return new AuthResult(true, new AUser(FileManager.GetFullUsername(m_Domains[0], UserSearch.Username), UserSearch.Enabled, FileManager.GetUserTokens(UserSearch)), "OK" );
+                }
+            }
+            else
+            {
+                return new AuthResult(false, null, "User Not Found");
+            }
         }
 
         public IAuthResult Authenticate(IAuthCredentials theCredentials)
         {
-            if (theCredentials.Scheme == Scheme.Form)
+            if ( ! FileManager.Exists())
             {
-                return doLookUp(theCredentials.Username, theCredentials.Password);
+                return new AuthResult(false, null, "System Error: User file does not exist");
             }
-            else if (theCredentials.Scheme == Scheme.Basic && theCredentials.HttpRequestHeaders != null) // Basic
+
+            string[] AuthorizationHeader = null;
+
+            switch (theCredentials.Scheme)
             {
-                KeyValuePair<string, IEnumerable<string>> AuthorizationHeader = theCredentials.HttpRequestHeaders.FirstOrDefault(Header => Header.Key == c_HttpRequestHeaders[0]);
+                case Scheme.Form:
+                    return doLookUp(theCredentials.Username, theCredentials.Password);
 
-                if (AuthorizationHeader.Equals(new KeyValuePair<string, IEnumerable<string>>()))
-                {
-                    return new AuthResult(false, string.Empty, "Missing Authorization Header" );
-                }
+                case Scheme.Basic: // Username and Password Encoded in the Authorization Header
+                    AuthorizationHeader = GetAuthHeader(theCredentials.HttpRequestHeaders);
 
-                if (AuthorizationHeader.Value != null && AuthorizationHeader.Value.Count() > 0)
-                {
-                    string EncodedValue = AuthorizationHeader.Value.First();
+                    if (AuthorizationHeader == null)
+                    {
+                        return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), "Missing Authorization Header");
+                    }
+
+                    string EncodedValue = AuthorizationHeader.First();
                     string DecodedValue = Encoding.UTF8.GetString(Convert.FromBase64String(EncodedValue));
                     string DomainAndUsername = DecodedValue.Substring(0, DecodedValue.IndexOf(":"));
                     string Password = DecodedValue.Substring(DecodedValue.IndexOf(":") + 1);
@@ -207,7 +397,7 @@ namespace MultiPlug.Auth.Machine
                     }
                     else
                     {
-                        return new AuthResult(false, string.Empty, "Missing Domain");
+                        return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), "Missing Domain");
                     }
 
                     if (Domain.Equals(m_Domains[0], StringComparison.OrdinalIgnoreCase))
@@ -216,17 +406,59 @@ namespace MultiPlug.Auth.Machine
                     }
                     else
                     {
-                        return new AuthResult( false, string.Empty, "Domain mismatch" );
+                        return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), "Domain mismatch");
                     }
-                }
-                else
-                {
-                    return new AuthResult(false, string.Empty, "Missing value in Authorization Header" );
-                }
+
+                case Scheme.BearerToken:
+                    AuthorizationHeader = GetAuthHeader(theCredentials.HttpRequestHeaders);
+
+                    if (AuthorizationHeader == null)
+                    {
+                        return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), "Missing Authorization Header");
+                    }
+
+                    return doTokenLookUp(AuthorizationHeader.First());
+
+                default:
+                    return new AuthResult(false, new AUser(theCredentials.Username, false, new string[0]), "Not a Supported Authentication Scheme");
+            }
+        }
+
+        private string[] GetAuthHeader(IEnumerable<KeyValuePair<string, IEnumerable<string>>> theHttpRequestHeaders)
+        {
+            if (theHttpRequestHeaders == null)
+            {
+                return null;
+            }
+
+            var Search = theHttpRequestHeaders.FirstOrDefault(Header => Header.Key == c_HttpRequestHeaders[0]);
+
+            if (Search.Equals(default(KeyValuePair<string, IEnumerable<string>>)))
+            {
+                return null;
             }
             else
             {
-                return new AuthResult(false, string.Empty, "Not a supported Scheme" );
+                return Search.Value.ToArray();
+            }
+        }
+
+        private string[] GetAuthFriendlyNameHeader(IEnumerable<KeyValuePair<string, IEnumerable<string>>> theHttpRequestHeaders)
+        {
+            if (theHttpRequestHeaders == null)
+            {
+                return null;
+            }
+
+            var Search = theHttpRequestHeaders.FirstOrDefault(Header => Header.Key == "AuthorizationFriendlyName");
+
+            if (Search.Equals(default(KeyValuePair<string, IEnumerable<string>>)))
+            {
+                return null;
+            }
+            else
+            {
+                return Search.Value.ToArray();
             }
         }
     }

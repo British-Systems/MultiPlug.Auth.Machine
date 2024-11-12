@@ -31,8 +31,8 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="MultiPlug.Base, Version=1.0.72.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\MultiPlug.Base.1.0.72\lib\net472\MultiPlug.Base.dll</HintPath>
+    <Reference Include="MultiPlug.Base, Version=1.0.74.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\MultiPlug.Base.1.0.74\lib\net472\MultiPlug.Base.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -48,8 +48,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AuthResult.cs" />
+    <Compile Include="File\FileManager.cs" />
+    <Compile Include="Models\AuthResult.cs" />
     <Compile Include="MachineAuthentication.cs" />
+    <Compile Include="Models\AUser.cs" />
+    <Compile Include="Models\File\FileBody.cs" />
+    <Compile Include="Models\File\FileToken.cs" />
+    <Compile Include="Models\File\FileUser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -1,26 +1,25 @@
-﻿using System;
-using MultiPlug.Base.Security;
+﻿using MultiPlug.Base.Security;
 
-namespace MultiPlug.Auth.Machine
+namespace MultiPlug.Auth.Machine.Models
 {
     internal class AuthResult : IAuthResult
     {
         private string m_Message;
         private bool m_Result;
-        private string m_Identity;
+        private IUser m_User;
 
-        public AuthResult(bool theResult, string theIdentity, string theMessage)
+        public AuthResult(bool theResult, IUser theUser, string theMessage)
         {
             m_Result = theResult;
             m_Message = theMessage;
-            m_Identity = theIdentity;
+            m_User = theUser;
         }
 
-        public string Identity
+        public IUser User
         {
             get
             {
-                return m_Identity;
+                return m_User;
             }
         }
 
